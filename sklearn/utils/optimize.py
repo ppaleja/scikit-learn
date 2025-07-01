@@ -110,7 +110,7 @@ def _line_search_wolfe12(
     return ret
 
 
-def _cg(fhess_p, fgrad, maxiter, tol, verbose=0):
+def _cg(fhess_p, fgrad, maxiter, tol, verbose=0, cg_stopping="sum_abs_residuals"):
     """
     Solve iteratively the linear system 'fhess_p . xsupi = fgrad'
     with a conjugate gradient descent.
@@ -130,6 +130,13 @@ def _cg(fhess_p, fgrad, maxiter, tol, verbose=0):
     tol : float
         Stopping criterion.
 
+    verbose : int, default=0
+        Verbosity level.
+
+    cg_stopping : {"sum_abs_residuals", "quad_ratio"}, default="sum_abs_residuals"
+        Stopping criterion for CG. "sum_abs_residuals" uses the sum(|residuals|) <= tol,
+        "quad_ratio" uses the quadratic-approximation ratio stopping criterion.
+
     Returns
     -------
     xsupi : ndarray of shape (n_features,) or (n_features + 1,)
@@ -142,17 +149,36 @@ def _cg(fhess_p, fgrad, maxiter, tol, verbose=0):
     i = 0
     dri0 = np.dot(ri, ri)
     # We also keep track of |p_i|^2.
+    Q_prev = 0.0
     psupi_norm2 = dri0
     is_verbose = verbose >= 2
 
     while i <= maxiter:
-        if np.sum(np.abs(ri)) <= tol:
-            if is_verbose:
-                print(
-                    f"  Inner CG solver iteration {i} stopped with\n"
-                    f"    sum(|residuals|) <= tol: {np.sum(np.abs(ri))} <= {tol}"
-                )
-            break
+        if cg_stopping == "sum_abs_residuals":
+            if np.sum(np.abs(ri)) <= tol:
+                if is_verbose:
+                    print(
+                        f"  Inner CG solver iteration {i} stopped with\n"
+                        f"    sum(|residuals|) <= tol: {np.sum(np.abs(ri))} <= {tol}"
+                    )
+                break
+        elif cg_stopping == "quad_ratio":
+            # --- Quadratic‑approximation ratio stopping criterion (GH‑30160) ---
+            # q_j  = gᵀp_j + ½ p_jᵀ H p_j
+            Q_curr = np.dot(fgrad, xsupi) + 0.5 * np.dot(xsupi, fhess_p(xsupi))
+            # Avoid division by zero; if Q_curr is exactly zero the step is perfect.
+            if Q_curr != 0.0:
+                quad_ratio = np.abs(Q_curr - Q_prev) / np.abs(Q_curr)
+                if quad_ratio <= tol:
+                    if is_verbose:
+                        print(
+                            f"  Inner CG solver iteration {i} stopped with\n"
+                            f"    quadratic ratio <= tol: {quad_ratio} <= {tol}"
+                        )
+                    break
+            Q_prev = Q_curr
+        else:
+            raise ValueError(f"Unknown cg_stopping: {cg_stopping}")
 
         Ap = fhess_p(psupi)
         # check curvature
@@ -211,6 +237,7 @@ def _newton_cg(
     line_search=True,
     warn=True,
     verbose=0,
+    solver="newton-cg",
 ):
     """
     Minimization of scalar function of one or more variables using the
@@ -252,6 +279,13 @@ def _newton_cg(
     warn : bool, default=True
         Whether to warn when didn't converge.
 
+    verbose : int, default=0
+        Verbosity level.
+
+    solver : str, default="newton-cg"
+        Which CG stopping criterion to use. "newton-cg" uses sum(|residuals|) <= tol,
+        "newton-cg-ratio" uses the quadratic-approximation ratio stopping criterion.
+
     Returns
     -------
     xk : ndarray of float
@@ -291,7 +325,11 @@ def _newton_cg(
 
         # Inner loop: solve the Newton update by conjugate gradient, to
         # avoid inverting the Hessian
-        xsupi = _cg(fhess_p, fgrad, maxiter=maxinner, tol=termcond, verbose=verbose)
+        if solver == "newton-cg-ratio":
+            cg_stopping = "quad_ratio"
+        else:
+            cg_stopping = "sum_abs_residuals"
+        xsupi = _cg(fhess_p, fgrad, maxiter=maxinner, tol=termcond, verbose=verbose, cg_stopping=cg_stopping)
 
         alphak = 1.0
 

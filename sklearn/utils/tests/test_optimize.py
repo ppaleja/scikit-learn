@@ -10,7 +10,12 @@ from sklearn.utils._testing import assert_allclose
 from sklearn.utils.optimize import _check_optimize_result, _newton_cg
 
 
-def test_newton_cg(global_random_seed):
+def _newton_cg_solver_variants():
+    # Helper to provide both solver options
+    return ["newton-cg", "newton-cg-ratio"]
+
+@pytest.mark.parametrize("solver", _newton_cg_solver_variants())
+def test_newton_cg(global_random_seed, solver):
     # Test that newton_cg gives same result as scipy's fmin_ncg
 
     rng = np.random.RandomState(global_random_seed)
@@ -32,17 +37,18 @@ def test_newton_cg(global_random_seed):
 
     # func is a definite positive quadratic form, so the minimum is at x = 0
     # hence the use of absolute tolerance.
-    assert np.all(np.abs(_newton_cg(grad_hess, func, grad, x0, tol=1e-10)[0]) <= 1e-7)
+    assert np.all(np.abs(_newton_cg(grad_hess, func, grad, x0, tol=1e-10, solver=solver)[0]) <= 1e-7)
     assert_allclose(
-        _newton_cg(grad_hess, func, grad, x0, tol=1e-7)[0],
+        _newton_cg(grad_hess, func, grad, x0, tol=1e-7, solver=solver)[0],
         fmin_ncg(f=func, x0=x0, fprime=grad, fhess_p=hess),
         atol=1e-5,
     )
 
 
 @pytest.mark.parametrize("verbose", [0, 1, 2])
-def test_newton_cg_verbosity(capsys, verbose):
-    """Test the std output of verbose newton_cg solver."""
+@pytest.mark.parametrize("solver", _newton_cg_solver_variants())
+def test_newton_cg_verbosity(capsys, verbose, solver):
+    """Test the std output of verbose newton_cg solver for both stopping criteria."""
     A = np.eye(2)
     b = np.array([1, 2], dtype=float)
 
@@ -52,6 +58,7 @@ def test_newton_cg_verbosity(capsys, verbose):
         grad=lambda x: A @ x - b,
         x0=np.zeros(A.shape[0]),
         verbose=verbose,
+        solver=solver,
     )  # returns array([1., 2])
     captured = capsys.readouterr()
 
@@ -68,9 +75,19 @@ def test_newton_cg_verbosity(capsys, verbose):
             assert m in captured.out
 
     if verbose >= 2:
+        if solver == "newton-cg":
+            msg = [
+                "Inner CG solver iteration 1 stopped with",
+                "sum(|residuals|) <= tol",
+            ]
+        else:
+            msg = [
+                "Inner CG solver iteration 1 stopped with",
+                "quadratic ratio <= tol",
+            ]
+        for m in msg:
+            assert m in captured.out
         msg = [
-            "Inner CG solver iteration 1 stopped with",
-            "sum(|residuals|) <= tol",
             "Line Search",
             "try line search wolfe1",
             "wolfe1 line search was successful",
@@ -92,6 +109,7 @@ def test_newton_cg_verbosity(capsys, verbose):
                 grad=lambda x: A @ x - b,
                 x0=np.array([-2.0, 1]),  # null space of hessian
                 verbose=verbose,
+                solver=solver,
             )
         captured = capsys.readouterr()
         msg = [
@@ -115,6 +133,7 @@ def test_newton_cg_verbosity(capsys, verbose):
                 x0=b,
                 verbose=verbose,
                 maxiter=2,
+                solver=solver,
             )
         captured = capsys.readouterr()
         msg = [
@@ -137,6 +156,7 @@ def test_newton_cg_verbosity(capsys, verbose):
                 x0=np.array([1.0, 1.0]),
                 verbose=verbose,
                 maxiter=3,
+                solver=solver,
             )
         captured = capsys.readouterr()
         msg = [
@@ -156,6 +176,7 @@ def test_newton_cg_verbosity(capsys, verbose):
                 verbose=verbose,
                 maxiter=2,
                 maxinner=1,
+                solver=solver,
             )
         captured = capsys.readouterr()
         msg = [

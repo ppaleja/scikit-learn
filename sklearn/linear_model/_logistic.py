@@ -489,6 +489,7 @@ def _logistic_regression_path(
                 maxiter=max_iter,
                 tol=tol,
                 verbose=verbose,
+                solver=solver,
             )
         elif solver == "newton-cholesky":
             l2_reg_strength = 1.0 / (C * sw_sum)
@@ -577,7 +578,7 @@ def _logistic_regression_path(
         else:
             raise ValueError(
                 "solver must be one of {'liblinear', 'lbfgs', "
-                "'newton-cg', 'sag'}, got '%s' instead" % solver
+                "'newton-cg', 'newton-cg-ratio', 'sag'}, got '%s' instead" % solver
             )
 
         if multi_class == "multinomial":
