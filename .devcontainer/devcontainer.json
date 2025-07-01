@@ -1,0 +1,30 @@
+{
+    "name": "scikit-learn-benchopt-dev",
+
+    // Context is the root of the repo ( .. relative to .devcontainer )
+    "context": "..",
+
+    // Use the custom Dockerfile we created that already includes build deps.
+    "dockerFile": "Dockerfile",
+
+    // This will automatically forward common ports if needed, e.g. for notebook servers.
+    "forwardPorts": [8888],
+
+    // VS Code extensions to pre-install in the Codespace.
+    "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-toolsai.jupyter",
+        "ms-azuretools.vscode-docker"
+    ],
+
+    // Commands that are run after the container is created but before VS Code starts.
+    // We install the project in editable mode as well as benchopt.
+    "postCreateCommand": "pip install -e .[build,benchmark,tests] && pip install benchopt && benchopt install --env default --all",
+
+    // Optional container settings for a nicer developer experience.
+    "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "terminal.integrated.defaultProfile.linux": "bash"
+    }
+} 
